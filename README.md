@@ -1,0 +1,2 @@
+# Training
+KT_DATA
