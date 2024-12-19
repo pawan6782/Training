@@ -1,0 +1,1046 @@
+Installing K3s
+Install curl
+
+$ sudo apt-get update
+$ sudo apt-get install curl -y
+
+Install K3s
+$ curl -sfL https://get.k3s.io | sh -
+check the status
+$ systemctl status k3s
+change the permission of the cinfig file
+$ sudo chmod 644 /etc/rancher/k3s/k3s.yaml
+$ mkdir .kube
+$  sudo cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+$ sudo chown rps:rps ~/.kube/config
+Check the node status
+$ kubectl get node
+
+Check the system components running
+$ kubectl get all -n kube-system
+
+Kustomize
+ 
+ 
+
+### 1. Introduction to Kustomize
+
+**Kustomize** is a tool for customizing Kubernetes configurations. It allows you to define and reuse base configurations and 
+overlay specific configurations for different environments, making it easier to manage complex Kubernetes deployments.
+
+#### Key Features:
+- **Layered Configuration**: Combine and overlay configurations without altering the base files.
+- **Resource Patching**: Apply patches to Kubernetes resources.
+- **Environment-Specific Customization**: Tailor configurations for development, staging, and production environments.
+
+---
+
+### 2. Installing Kustomize
+
+#### Prerequisites:
+- **Kubernetes CLI (kubectl)**: Kustomize is integrated into `kubectl` as of version 1.14. You can also use the standalone Kustomize binary.
+
+#### Installation Steps:
+1. **Standalone Kustomize**:
+   ```bash
+   $ curl -LO "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize/v4.5.7/kustomize_v4.5.7_linux_amd64.tar.gz"
+   $ tar -xzvf kustomize_v4.5.7_linux_amd64.tar.gz
+   $ sudo mv kustomize /usr/local/bin/
+   ```
+
+2. **Using Kustomize with kubectl**:
+   - If you have `kubectl` installed, Kustomize is already integrated. You can use it by running:
+     ```bash
+     kubectl kustomize ./path/to/kustomization/
+     Syntax 
+     kubectl apply -k path_to_kustomization 
+     ```
+
+---
+First Lab 
+
+https://github.com/kubernetes-sigs/kustomize/tree/master/examples/helloWorld
+To fix the commonlable warning
+use the below command
+$ kustomize edit fix path_to_kustomizationfile
+
+### 3. Basic Concepts in Kustomize
+
+#### 3.1. Base and Overlay
+
+- **Base**: A set of YAML files that define Kubernetes resources (e.g., Deployments, Services).
+- **Overlay**: Customizations applied to the base configurations. Overlays can be used to modify configurations for different environments.
+
+#### 3.2. Kustomization File
+
+A `kustomization.yaml` file defines how resources are combined and customized. This file includes:
+- **Resources**: List of base YAML files.
+- **Patches**: Modifications to apply to the resources.
+- **ConfigMaps/Secrets**: Definitions of ConfigMaps and Secrets.
+
+---
+
+### 4. Creating a Basic Kustomize Project
+
+#### Example: Configuring a Simple Nginx Deployment
+
+1. **Project Structure**:
+   ```
+   my-kustomize-project/
+   ├── base/
+   │   ├── deployment.yaml
+   │   ├── service.yaml
+   │   └── kustomization.yaml
+   └── overlays/
+       ├── development/
+       │   └── kustomization.yaml
+       └── production/
+           └── kustomization.yaml
+   ```
+
+2. **Base Configuration**:
+
+   **`base/deployment.yaml`**:
+   
+   apiVersion: apps/v1
+   kind: Deployment
+   metadata:
+     name: nginx-deployment
+   spec:
+     replicas: 2
+     selector:
+       matchLabels:
+         app: nginx
+     template:
+       metadata:
+         labels:
+           app: nginx
+       spec:
+         containers:
+         - name: nginx
+           image: nginx:1.14.2
+           ports:
+           - containerPort: 80
+   ```
+
+   **`base/service.yaml`**:
+   
+   apiVersion: v1
+   kind: Service
+   metadata:
+     name: nginx-service
+   spec:
+     selector:
+       app: nginx
+     ports:
+     - protocol: TCP
+       port: 80
+       targetPort: 80
+   ```
+
+   **`base/kustomization.yaml`**:
+   ```yaml
+   resources:
+   - deployment.yaml
+   - service.yaml
+   ```
+
+3. **Overlay Configuration**:
+
+   **Development Overlay (`overlays/development/kustomization.yaml`)**:
+  
+   resources:
+   - ../../base
+
+   patchesStrategicMerge:
+   - patch.yaml
+
+   configMapGenerator:
+   - name: nginx-config
+     literals:
+     - environment=development
+   ```
+
+   **Production Overlay (`overlays/production/kustomization.yaml`)**:
+   
+   resources:
+   - ../../base
+
+   patchesStrategicMerge:
+   - patch.yaml
+
+   configMapGenerator:
+   - name: nginx-config
+     literals:
+     - environment=production
+   ```
+
+4. **Patch Configuration**:
+   Create a `patch.yaml` file in each overlay to modify the base deployment:
+
+   **`overlays/development/patch.yaml`**:
+ 
+   apiVersion: apps/v1
+   kind: Deployment
+   metadata:
+     name: nginx-deployment
+   spec:
+     replicas: 1
+   ```
+
+   **`overlays/production/patch.yaml`**:
+ 
+   apiVersion: apps/v1
+   kind: Deployment
+   metadata:
+     name: nginx-deployment
+   spec:
+     replicas: 3
+   ```
+
+---
+
+### 5. Deploying with Kustomize
+
+To apply the configuration for a specific environment, use the following command:
+
+#### Deploying to Development:
+
+kubectl apply -k overlays/development/
+```
+
+#### Deploying to Production:
+
+kubectl apply -k overlays/production/
+```
+
+Kustomize will merge the base and overlay configurations and apply them to your Kubernetes cluster.
+
+---
+
+### 6. Advanced Kustomize Features
+
+#### 6.1. Applying Patches
+Kustomize allows you to apply different types of patches to your resources.
+
+**Strategic Merge Patch**:
+- Merges the overlay changes into the base YAML.
+
+**JSON Patch**:
+- Applies specific JSON operations to modify the base YAML.
+
+#### 6.2. ConfigMap and Secret Generators
+Kustomize can generate ConfigMaps and Secrets from files, literals, or environment variables.
+
+**Example**:
+
+configMapGenerator:
+- name: app-config
+  files:
+  - config.properties
+```
+
+#### 6.3. Using Common Labels and Annotations
+Kustomize allows you to add common labels and annotations to all resources:
+
+
+commonLabels:
+  app: my-app
+
+commonAnnotations:
+  environment: staging
+```
+
+---
+
+### 7. Lab Exercise: Customizing a Kubernetes Deployment
+
+**Objective**: Use Kustomize to manage different configurations for a Kubernetes application deployed in both a staging and production environment.
+
+#### Steps:
+1. **Set Up a Basic Project Structure**:
+   - Create a base directory with a simple Kubernetes deployment.
+
+2. **Create Overlays**:
+   - Create staging and production overlays with different configurations (e.g., replica counts, environment variables).
+
+3. **Apply Configurations**:
+   - Deploy the application to a Kubernetes cluster using both the staging and production configurations.
+
+4. **Verify the Deployments**:
+   - Ensure that the appropriate configurations are applied to each environment.
+
+5. **Submit Your Work**:
+   - Provide the project structure and a summary of the results.
+
+---
+
+
+Kustomize 
+
+https://github.com/kubernetes-sigs/kustomize/tree/master/examples/helloWorld
+
+https://github.com/kubernetes-sigs/kustomize/tree/master/examples/mySql
+
+
+Day 2 (17-12-2024)
+
+Deploy the Metallb Loadbalancer 
+
+Install the metallb loadbalcner
+
+$ kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.13.7/config/manifests/metallb-native.yaml
+
+Check your node ip range
+
+$ kubectl get node -o wide
+
+Create the metallb-config file and define the ippool use for the LB ip
+
+$ cat >metallb-config.yaml
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: first-pool
+  namespace: metallb-system
+spec:
+  addresses:
+  - 192.168.117.200-192.168.117.240
+---
+
+apiVersion: metallb.io/v1beta1
+kind: L2Advertisement
+metadata:
+  name: example
+  namespace: metallb-system
+
+  
+press ctrl-d tosave
+Apply the yaml file
+
+$ kubectl apply -f metallb-config.yaml
+
+Check the status of metallb controller 
+
+$ kubectl get pod -n metallb-system
+Installing Helm
+$ curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+$ chmod 700 get_helm.sh
+$ ./get_helm.sh
+Add the repor
+$ helm repo add bitnami https://charts.bitnami.com/bitnami
+
+Install the helm chart
+$ helm install mygrafana bitnami/grafana --version=8.4.6 --set persistence.enabled=false --set service.type=LoadBalancer
+
+to display helm chart 
+$helm list
+
+to display the values that is been used to install the helm chart 
+$helm get values mygrafana
+
+to access the grafana dashbaord and to get the admin password execute the command
+
+$helm status mygrafana
+
+this will give you the command to get the admin password and the loadbbalcnerip 
+
+upgrade the helm chart 
+check the current version
+helm list
+check the revision history
+helm history mygrafana
+
+to upgrade
+helm upgrade mygrafana bitnami/grafana --set persistence.enabled=false --set service.type=LoadBalancer
+
+to check the history
+helm history mygrafana
+
+helm performs the rolling upgrade of the application
+ to verify
+kubectl get deployment mygrafana
+kubectl get rs |grep -i grafana
+
+you will see 2 replicasets 
+
+to roll back to the previous version
+helm rollback mygrafana 1
+1 is the revision number
+
+to verify
+helm list
+helm history mygrafana
+
+Delete HELM Chart
+
+$ helm list
+
+check the name of the chart which you want to delete
+
+$ helm delete mygrafana
+
+Search helm chart and download teh chart
+
+ $ helm search repo bitnami|more
+ to download 
+  $ helm fetch bitnami/tomcat
+  $ ls
+  
+   you will get the chart in the tar.gz format
+   
+   $ helm fetch --untar bitnami/tomcat
+  the command will extract the helm chat in the directory. you will see the directory name tomcat in the current directory
+  browse all the files you have in the hel chart
+  
+  
+  Github Lab
+  Installing Git on ubuntu VM
+  $ sudo apt-get install git -y
+  
+  Create local repo
+  $ cd ~
+  $ mkdir vote
+  Initiliing the first local repo
+  $ git init vote
+  to verify the local repo
+  $ cd vote
+  $ ls -a
+  you will see a .git directory
+  Create some test files locally.
+  $ cat > vote-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: vote
+  name: vote
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      role: vote
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: python
+        role: vote
+        version: v1
+    spec:
+      containers:
+      - image: schoolofdevops/vote:v1
+        name: vote
+        ports:
+        - containerPort: 80
+
+  press Ctrl-d to save
+  
+  $ cat > vote-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  creationTimestamp: null
+  labels:
+    app: vote
+  name: vote
+spec:
+  ports:
+  - port: 3000
+    protocol: TCP
+    targetPort: 3000
+  selector:
+    role: vote
+  type: LoadBalancer
+
+press ctrl-d to save
+
+Check the status of the files in the git local respository
+$ git status
+
+to add the files to the statging area
+$ git add .
+
+to commit the files 
+
+$ git commit -m " k8s files"
+
+Create the remote repo in github
+
+create a public repo in github with name vote. initialize the repo which creating the repo
+
+Add the remote repo and link it with local repo . Copy the URL of the github repor. please modify the URL in the below command with your own repo URL
+
+$ git remote add origin https://github.com/sahera1987143/vote.git
+
+check the status of the remote repo
+$ git remote -v
+
+push the changes to the remote repo fron the local
+
+$ git push origin master
+
+go to the remote repo in github and verify the files.
+
+
+
+Git branch and merge
+ mkdir bb-app
+  233  git init bb-app
+  234  cd bb-app/
+  235  ls -a
+  236  git branch
+  237  git branch -a
+  238  touch bb-app-deploy.yaml bb-app-svc.yaml bb-app-cm.yaml bb-app-secret.yaml
+  239  git status
+  240  git add .
+  241  git status
+  242  git commit -m " adbb-app file"
+  243  git branch
+  244  git branch bb-dev
+  245  git branch
+  246  git branch bb-uat
+  247  git branch bb-prod
+  248  git branch
+  249  git status |more
+  250  git log |more
+  251  ls
+  252  git branch
+  253  git checkout bb-dev
+  254  git branch
+  255  ls
+  256  touch bb-app-dev-cm.yaml
+  257  touch bb-app-dev-job.yaml
+  258  git sttaus
+  259  git status
+  260  git add .
+  261  git commit -m " upated app-dev files"
+  262  ls
+  263  git checkout -b master
+  264  git checkout master
+  265  git branch
+  266  ls
+  267  git branch bb-uat
+  268  git checkout bb-uat
+  269  ls
+  270  touch bb-app-uat-cm.yaml
+  271  touch bb-app-uat-job.yaml
+  272  git add .
+  273  git commit -m " updatet bb-uat files"
+  274  git checkout master
+  275  ls
+  276  git merge bb-dev master
+  277  ls
+  278  git checkout bb-uat
+  279  git diff
+  280  git diff master
+  281  git checkout master
+  282  git merge bb-uat
+  283  ls
+  Cretae the bb-app repo in Github and add theremote repo to you local reposisotry
+  284  git remote add origin https://github.com/sahera1987143/bb-app.git
+  285  git push origin master
+  286  git branch
+  287  git fetch origin master
+  293  git rebase remotes/origin/master
+  294  git push origin master
+  295  git pull https://github.com/sahera1987143/bb-app.git
+  296  ls
+  297  git push origin master
+  
+  Go and check the Github repository and you will see all teh file sbut no branches.
+  oush the files to indivua branches
+  
+  298  git branch bb-dev
+  299  git checkout bb-dev
+  300  ls
+  301  touch bb-app-dev-pvc.yaml
+  302  git add .
+  303  git commit -m " adding pvc files"
+  304  git puch origin bb-dev
+  305  git push origin bb-dev
+  306  git checkout bb-uat
+  307  ls
+  308  touch bb-app-uat-pvc.yaml
+  309  touch bb-app-uat-sa.yaml
+  310  git add .
+  311  git commit -m " adding uat files"
+  312  git push origin bb-uat
+
+Day 3
+
+Flux Install
+
+Bootstraping the flux with github
+
+$ export GITHUB_USER=uername
+$ export GITHUB_TOKEN=PAT
+
+$ curl -s https://fluxcd.io/install.sh | sudo bash
+
+execute teh following command for bootstraping flux with github 
+
+Uninstall flux 
+
+$ flux uninstall
+
+reinstall using the follwoing command
+
+$ flux bootstrap github \
+  --token-auth \
+  --owner=$GITHUB_USER \
+  --repository=fluxcdrepo \
+  --branch=main \
+  --path=./clusters/cluster1 \
+  --personal
+
+Verify all the flux components
+
+$ kubectl get all -n flux-system
+
+to get the source control resources
+
+$ flux get source git
+
+to check the kustomization controller resources
+
+$ flux get kustomization
+
+
+Lab : Deploying application using flux 
+
+Clone the respository create by flux
+$ cd ~
+
+$  git clone https://github.com/username/fluxcdrepo.git
+
+$  git config --global user.name "github-username"
+$  git config --global user.email "github-user-email"
+$  git clone https://github.com/ayyan2009/bb-app-source.git
+$  cd bb-app-source/
+$  git checkout 1-demo
+$  ls
+$  cd manifests/
+$  ls
+$  cat deployment.yml
+$  cat deployment.yml |more
+$  cat service.yml |more
+$  cat namespace.yml
+
+to add the source  control resource and create the yaml fiel for same
+$  flux create source git 1-demo --url https://github.com/ayyan2009/bb-app-source --interval 20s --branch 1-demo --export
+$  flux create source git 1-demo --url https://github.com/ayyan2009/bb-app-source --interval 20s --branch 1-demo --export > ~/fluxcdrepo/clusters/cluster1/1-demo.yaml
+Create the ksutomization resource 
+$  flux create kustomization kustomization-1demo --source 1-demo --path ./manifests --prune=true --export
+$  flux create kustomization kustomization-1demo --source 1-demo --path ./manifests --prune=true --export >> ~/fluxcdrepo/clusters/cluster1/1-kustomization.yaml
+$  cd ~/fluxcdrepo/clusters/cluster1
+$  ls
+$  git add .
+$  git commit -m " 1-demo manifgest file "
+$  git push
+$  flux get source git
+$  flux get kustomization
+$  kubectl get ns
+$  kubectl get all -n 1-demo
+$  kubectl get pod -n flux-system
+
+
+to heck how it internally works . login to source control pod
+$ kubectl -n flux-system exec -it source-controller-588446b84b-rhcsc -- sh
+$ cd data
+$ cd Gitrepository
+
+you will get a tar.gz file in 1-demo file
+
+to see the content 
+
+$ tar -tf file.targz-file
+
+you will see all the manifest file which was there in your repo 
+
+exit from the pod
+
+$ exit
+
+Verify the application 
+
+$ kubectl get ns
+
+you will see anew namespace
+
+$ flux get source git
+
+$ flux get kustomization 
+
+you will see a new got source addedd and one new ksutomization resources adedd
+
+Lab 2 Kustomization manifest yaml files
+$ cd ~/bb-app-source
+$ git checkout main
+$  git checkout 3-demo
+$ ls
+$  cd kustomize/
+$  ls
+$ cat deployment.yml
+$ ls
+$ cat kustomization.yml
+$ cat service.yml
+$  ls
+$  cat namespace.yml
+
+adding the git source control resource
+$ flux create source git 3-demo --url https://github.com/ayyan2009/bb-app-source --branch 3-demo --interval 10s --export > ~/fluxcdrepo/clusters/cluster1/3-demo-source.yaml
+
+$  flux create kustomization 3-demo-kustomization --source 3-demo --prune true --interval 10s --target-namespace 3-demo --path kustomize --export > ~/fluxcdrepo/clusters/cluster1/3-demo-kustomization.yaml
+$ cat ~/fluxcdrepo/cluster/cluster1/3-demo-kustomization.yaml
+$  cat ~/fluxcdrepo/clusters/cluster1/3-demo-source.yaml
+$  cd ~/fluxcdrepo/clusters/cluster1
+$  ls
+$  git add .
+$  git commit -m "3-demo"
+$  git push
+$  flux get source git
+$  kubectl get ns
+$ 
+You will the application is deployed and running in clusterr
+
+  Wiat for the interval time and check that the application is deployed 
+  $ flux get source git 
+  
+  you will a new git source has been addedd
+  
+  $ flux get source kustomization 
+  
+  you will see one new kustomization resource is addedd
+  
+  check the application
+  
+  $ kubectl get ns
+  
+  you will see the new ns 
+  
+  To manually reconsile the source git
+  
+  $ flux get source git
+  
+  select the name of the resource you want to reconscile
+  
+  $ flux reconcile source git resourname
+  
+  to reconcile the kustomization resource
+  
+  $ flux reconcile kustomization resourcename
+  
+  Helm Controoller
+  $ helm search repo bitnami |grep -i ingress
+  404  helm fetch --untar bitnami/nginx-ingress-controller
+  Go to github and create a new repo with name ingress-controller initialize the repo and the clone the repo locally
+  $ git clone https://github.com/sahera1987143/ingress-controller.git
+  $ ls
+  $ cp -r nginx-ingress-controller/ ingress-controller/
+  $ cd ingress-controller/
+  $ ls
+  $ cd nginx-ingress-controller/
+  411  ls
+  412  cd ..
+  push the helm chart files to the repo you have just created 
+  $ git add .
+  $ git commit -m " helm files"git p
+  $   git push
+  create the git source resource for the helm as the helm files are stored in git repository
+  $ flux create source git helm-demo-git --url https://github.com/sahera1987143/ingress-controller.git --branch master --timeout 10s --export
+  
+  $ flux create source git helm-demo-git --url https://github.com/sahera1987143/ingress-controller.git --branch master --timeout 10s --export > ~/fluxcdrepo/clusters/cluster1/helm-demo-git.yaml
+
+ Create the calues.yaml file
+ $ cd 
+ $ cat > values.yaml
+ replicaCount: 2
+press ctr-d to save
+
+ Cretae the helmrelease resource for deploying the chart
+ $ history
+$  flux create helmrelease helm-demo-release-git --chart nginx-ingress-controller --interval 10s --target-namespace default --source GitRepository/helm-demo-git --values ./values.yaml --export > ~/fluxcdrepo/clusters/cluster1/helm-demo-release-git.yaml
+  $ cd ~/fluxcdrepo/clusters/cluster1/
+  $ git add .
+  $  git commit -m " helm git demo"
+  $   git push
+
+Verify the deployment
+
+ $ flux get sources git
+  $ flux get helmreleases
+  $ kubectl get deployment
+  $  kubectl get svc
+  $ flux get helmreleases
+
+
+Use Helm repository as the source (Helm source)
+we will be using the following helm repo and helm chart for this lab
+Helm Repository =  https://prometheus-community.github.io/helm-charts
+Hclm chart = kube-prometheus-stack
+ $ flux create source helm helm-source-demo-nginx --url https://prometheus-community.github.io/helm-charts --timeout=10s --expocrt
+  $ flux create source helm helm-source-demo-nginx --url https://prometheus-community.github.io/helm-charts --timeout=10s --export  > ~/fluxcdrepo/clusters/cluster1/helm-source-demo-nginx.yaml
+ $ cat  > values.yaml
+  replicaCount: 1
+  press ctr-d to save
+  cd nginx-ingress-controller
+  Create the helm release resource 
+  
+  $  flux create helmrelease helm-repo-demo-chart --chart kube-prometheus-stack  --interval 10s --target-namespace instavote  --source HelmRepository/helm-source-demo-nginx --values ./values.yaml --export
+  $  flux create helmrelease helm-repo-demo-chart --chart kube-prometheus-stack  --interval 10s --target-namespace instavote --source HelmRepository/helm-source-demo-nginx --values ./values.yaml --export > ~/fluxcdrepo/clusters/cluster1/helm-repo-demo-chart.yaml
+  $ cd ~/fluxcdrepo/clusters/cluster1/
+  $  git ad .
+  $  git add .
+  $  git commit -m " helm repo source yaml "
+  $  git push
+  $  cd
+  VERIFY THE REsources 
+  $ flux get source all
+  $ flux get source all
+  $ flux get source helm
+  $ flux get source helm
+  $ flux get helmreleases
+  
+  verify the application 
+  
+  $ kubectl get ns
+  $ kubectl get all -n ns
+  
+  Day 4 Image Automation
+  
+  Enable the image automation and reflection controller
+  $ flux bootstrap github --token-auth --owner=sahera1987143 --repository=fluxcdrepo --path=clusters/cluster1 --personal=true --private=false --components-extra="image-reflector-controller,image-automation-controller"
+  Explore Flux-system namespace
+  
+  $ kubectl -n flux-system get po,deployment
+  $ kubectl get crd |grep -i image
+  
+  
+  Create the Image and store in your docker registry
+  you need to have a dockerhub account (for our lab)
+  Install docker
+  $ sudo apt-get install docker.io -y
+  $ sudo usermod -aG docker rps
+  relodgin 
+  $ sudo su - rps
+  fork the following repository in your guthub account 
+  browse the url in the browser and fork it in your git account
+  https://github.com/sahera1987143/bb-app-source.git 
+  $ git clone https://github.com/username/bb-app-source.git
+  if while cloning thereis a error then perform the following
+  $ cd ~
+  $ rm -rf bb-app-source
+  $ git clone https://github.com/username/bb-app-source.git
+  
+  cd bb-app-source/
+  $ git branch
+  $ git checkout 8-demo
+  check the files 
+  $ ls 
+  
+  $ docker login docker.io
+  $ cat manifests/deployment.yml |grep -i image
+  
+  the yaml file currently having some other user image which we need to replace with our own image. we will pull the public image and tag with our own dockerusername and push ito to the docker regsitry
+  
+   $ docker pull siddharth67/block-buster-dev:7.8.0
+   $ docker image ls
+   Please replace username with your dockerusername
+  
+   $ docker tag siddharth67/block-buster-dev:7.8.0 docker.io/username/block-buster-dev:7.8.0
+   $ docker image ls
+   $ docker image push docker.io/sahera1987143/block-buster-dev:7.8.0
+   verify the image by login to your docker regustry
+   Edit the yaml file and change the image name and replace with your image bane you just have created 
+   $ vi manifests/deployment.yml
+   image: docker.io/username/block-buster-dev:7.8.0
+   26  cat manifests/deployment.yml |grep -i image
+   make sure that you are in bb-app-source directory
+   27  git add .
+   29  git commit -m "updated the image"
+   30  git push
+  the updated depl.yaml file will be oushed your repo
+  
+  Crete the Git resource and kustomization resource to deploy the app using fluxcd
+  
+  $ flux create source git 8-demo-source-git-bb-app --url https://github.com/sahera1987143/bb-app-source --branch 8-demo --timeout 10s --export
+  $ flux create source git 8-demo-source-git-bb-app --url https://github.com/sahera1987143/bb-app-source --branch 8-demo --timeout 10s --export > ~/fluxcdrepo/clusters/cluster1/8-demo-source-git-bb-app.yaml
+   
+  $ flux create kustomization 8-demo-kustomization-git-bb-app --source GitRepository/8-demo-source-git-bb-app --prune=true --interval 100s --target-namespace 8-demo --path manifests --export
+  
+  $ flux create kustomization 8-demo-kustomization-git-bb-app --source GitRepository/8-demo-source-git-bb-app --prune=true --interval 100s --target-namespace 8-demo --path manifests --export > ~/fluxcdrepo/clusters/cluster1/8-demo-kustomization-git-bb-app.yaml
+   $ cd ~/fluxcdrepo/cluster/cluster1/
+   $ git add .
+   $ git commit -m " 8-demo files"
+   $ git push
+   if face error then follow the below steps else move to next section
+  $  git pull
+  $ git branch
+   $ git branch -a
+   $ git rebase remotes/origin/HEAD
+   $ git rebase remotes/origin/main
+$ git push
+
+Validate the application 
+   $ flux get source git
+   $  flux get source kustomization
+   $  flux get kustomization
+   $ flux reconcile source git flux-system
+   $ flux get source git
+   $ flux get kustomization
+   $  kubectl get ns
+   $ kubectl get pod,deployment,svc -n 8-demo
+   to verify the image though which the pod is running 
+   $ kubectl describe pod block-buster-5c784bb477-87vj8 -n 8-demo|more
+   $ kubectl get pod,deployment,svc -n 8-demo
+   
+   try to access the application using the nodeip:nodeport
+   
+   Create the Image repository resource 
+   $ flux create image repository 8-demo-image-repo-bb-app --image docker.io//sahera1987143/block-buster-dev --interval 20s --export
+   $ flux create image repository 8-demo-image-repo-bb-app --image docker.io//sahera1987143/block-buster-dev --interval 20s --export  > ~/fluxcdrepo/clusters/cluster1/8-demo-image-repo-bb-app.yaml
+   $ cd ~/fluxcdrepo/clusters/cluster1
+   $ git add .
+   $  git commit -m "ading image repository resource 8-demo "
+   $  git push
+   $ flux get image all
+   
+   reconsile and check 
+  $ flux reconcile source git flux-system
+  $ flux get image all
+  $ flux get all
+  $  flux get image
+  
+  Wait for few minutes and the execute 
+ $ flux get image
+  $ flux get images
+ $ flux get image all
+ the image repsoitory flux resource add the crd imagerepositories resource 
+  $ kubectl -n flux-system get imagerepositories
+  $  kubectl -n flux-system get imagerepositories 8-demo-image-repo-bb-app -o yaml |grep -i scanresult -A5
+  $ flux get image all
+  
+  updating the image and pushing the new image to your docker registry
+   $ cd bb-app-source/
+   $ git branch
+   ensure you are in 8-demo branch
+   $  ls
+ 
+   $ cd src
+  $ ls
+
+   $ sed -i "s/80F1BE/A01B40/g" index.php
+   $ sed -i "s/80F1BE/A01B40/g" level2.php
+   $ sed -i "s/7.8.0/7.8.1 (minor colour change)/g" index.php
+   $ sed -i "s/7.8.0/7.8.1 (minor colour change)/g" level2.php
+   $ pwd
+   $ docker build -t docker.io/sahera1987143/block-buster-dev:7.8.1 .
+   $ docker image ls
+   $ docker image push sahera1987143/block-buster-dev:7.8.1
+   $ flux get image all
+   $  flux reconcile image repository 8-demo-image-repo-bb-app
+   
+  
+   $ kubectl -n flux-system get imagerepositories 8-demo-image-repo-bb-app -o yaml |grep -i scanresult -A5
+   $ flux get image repository
+
+  you will see that the imagerepositories resource will able to scan the image repository and scan all the images tags
+  
+
+   Creating the Image policy
+   $ flux get all
+  $ flux get image repository
+
+  $ flux create image policy 8-demo-image-policy-bb-app --image-ref 8-demo-image-repo-bb-app --select-semver 7.8.x --export
+  833  flux create image policy 8-demo-image-policy-bb-app --image-ref 8-demo-image-repo-bb-app --select-semver 7.8.x --export > ~
+/fluxcdrepo/clusters/cluster1/8-demo-image-policy-bb-app.yaml
+  $ cd ~/fluxcdrepo/cluster/cluster1/
+  $ git add .
+  $ git commit -m " imagepolicy of 8-demo"
+  $ git push
+  $ flux get image all
+  $ flux get image policy
+  $flux reconcile source git flux-system
+  $ flux get image policy
+  $  kubectl -n flux-system get imagepolicy 8-demo-image-policy-bb-app -o yaml |more
+  $
+  845  flux get source git
+  846  flux get image policy
+  Create the image update resouce in flux
+  
+  
+  $ flux create image update 8-demo-image-update-bb-app --git-repo-ref 8-demo-source-git-bb-app --checkout-branch 8-demo --author-name sahera --author-email sahera1987143@gmail.com --git-repo-path ./manifests --push-branch 8-demo --interval 100s --export
+  $ flux create image update 8-demo-image-update-bb-app --git-repo-ref 8-demo-source-git-bb-app --checkout-branch 8-demo --author-name sahera --author-email sahera1987143@gmail.com --git-repo-path ./manifests --push-branch 8-demo --interval 100s --export > ~/fluxcdrepo/clusters/cluster1/8-demo-image-update-bb-app.yaml
+
+  $ cd ~/fluxcdrepo/clusters/cluster1
+ $ git add .
+  $ git commit -m " image update res 8-demo"
+  $ git push
+  $ flux reconcile source git flux-system
+  $ flux get image update
+  $ flux get image all
+  $ flux get image update
+  
+  you might see a erro that no updates made or you will get repository is up to date. in order to make flux update the yaml file we need to add a tag to the dep.yaml file
+  $ cd bb-app-source/
+  $ cd manifests/
+  edit the yaml file
+  
+ $ vi deployment.yaml
+ 
+ add the tag in the image filed as below. you need to add the # {"$imagepolicy": "flux-system:8-demo-image-policy-bb-app"} after the image name similiar to shown below
+ 
+ image: docker.io/sahera1987143/block-buster-dev:7.8.0 # {"$imagepolicy": "flux-system:8-demo-image-policy-bb-app"}
+ 
+ save teh file 
+ 
+ $  cat deployment.yml |grep -i image
+ $ git add .
+  $ git commit -m " added the flux tag"
+  $ git push
+  $ flux reconcile image policy 8-demo-image-policy-bb-app
+  $ flux get image policy
+  $ flux get image update
+  
+  no yu will get th authentication failure as flux do have the credetial to update the manifest in the yaml file
+  to do so we need to create a flux key and add it to the repository
+  
+  
+  $ flux create secret git 8-demo-git-bb-app-auth --url=ssh://git@github.com/sahera1987143/bb-app-source.git --ssh-key-algorith
+m=ecdsa --ssh-ecdsa-curve=p521
+
+ The command will generate a key copy the key starting from ecdsa. got you bb-app-source repository and slick on settings
+click on deploy key and create a new key 
+name : flux-key
+paste the key which you have copied 
+  $ flux create source git 8-demo-source-git-bb-app --url ssh://git@github.com/sahera1987143/bb-app-source.git --branch 8-demo
+--timeout 10s --secret-ref 8-demo-git-bb-app-auth --export
+  $ flux create source git 8-demo-source-git-bb-app --url ssh://git@github.com/sahera1987143/bb-app-source.git --branch 8-demo
+--timeout 10s --secret-ref 8-demo-git-bb-app-auth --export > ~/fluxcdrepo/clusters/cluster1/8-demo-source-git-bb-app.yaml
+  $  cd ~/fluxcdrepo/cluster/cluster1/
+
+  $ git add .
+  $  git commit -m " updated 8-demo source git with secret"
+  $  git push
+ $ flux get image update
+  $ flux reconcile source git flux-system
+  $ flux reconcile source git 8-demo-source-git-bb-app
+  $ flux reconcile kustomization 8-demo-kustomization-git-bb-app 
+ $ flux get image update
+ $ flux get image policy
+  $  kubectl get deployment,rs,pod -n 8-demo
+ 
+  $  kubectl describe pod/block-buster-6d4b89f77f-zw8j8 -n 8-demo
+
+you can see the new pod is created with the new image and a new relicaste is created . 
+ 
+  $ kubectl get deployment,rs,pod -n 8-demo
+
+  
+  
+  
+
+ 
